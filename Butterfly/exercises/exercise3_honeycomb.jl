@@ -2,50 +2,67 @@ using Quantica, GLMakie, StaticArrays, LinearAlgebra
 
 d_nn = 1.0
 a = sqrt(3) * d_nn
-M = 4
-
+M = 5
+N = 4
 A1 = SVector(a * cos(π/3), a * sin(π/3))
-A2 = SVector(-a * cos(π/3), a * sin(π/3))
+A2 = SVector(a * cos(π/3), -a * sin(π/3))
+using StaticArrays
 
-sA = sublat((0.0,  d_nn / 2), name = :A)
-sB = sublat((0.0, -d_nn / 2), name = :B)
-lat = lattice(sA, sB, bravais = (A1, A2))
+function unit_coords(N, d_nn)
+    #hexagon part
+    startA = SVector(0.0, -d_nn / 2)
+    startB = SVector(0.0,  d_nn / 2)
+
+    a1 = SVector(sqrt(3) / 2, -0.5)
+    a2 = SVector(sqrt(3) / 2,  0.5)
+    a3 = startB-startA
+
+    coords = SVector{2, Float64}[startA, startB]
+
+    m = d_nn .* a1 / (N - 1)
+    n = d_nn .* a3 / (N - 1)
+    k = d_nn .* a2 / (N - 1)
 
 
-hex_center_0 = SVector((A1+A2)/2)
-
-# centers of the M x M grid of hexagons
-hex_centers = [hex_center_0 + n1 * A1 + n2 * A2 for n1 in 0:(M - 1), n2 in 0:(M - 1)]
-
-# find the related sites of each center
-function is_on_hex_mesh(r, centers, d_nn)
-    pt = SVector(r[1], r[2])
-    for c in centers
-        if isapprox(norm(pt - c), d_nn, atol = 1e-4)
-            return true
-        end
+    for i in 1:(N - 2)
+        pt_n = startA + i .* n
+        pt_m = startA + i .* m
+        pt_k = startB + i .* k
+        push!(coords, pt_n, pt_m, pt_k)
     end
-    return false
+    return coords
 end
 
-slat = lat |> supercell(region = r -> is_on_hex_mesh(r, hex_centers, d_nn))
+pts = unit_coords(N, d_nn)
+
+lat = lattice(sublat(pts), bravais = (A1, A2))
+
+inv_A = inv(hcat(A1, A2))
+function rhomboid_region(r, inv_A, M, d_nn, N)
+    pt = SVector(r[1], r[2])
+    n = inv_A * pt 
+    del = d_nn/(N)
+    return (-del <= n[1] <= M + del) && 
+           (-del <= n[2] <= M + del) &&
+           (abs(r[2])<= (1+(M-1)*1.5))
+end
+
+
+slat = lat |> supercell(region = r -> rhomboid_region(r, inv_A, M, d_nn, N))
 
 peierls_hopping = @hopping(
     (r, dr; t = 1.0, B = 0.0) -> t * cis(0.5 * B * (r[1] * dr[2] - r[2] * dr[1])),
-    range = 1.05,
-    sublats = :A => :B
+    range = d_nn/(N-1)+0.00002,
 )
 
-h = slat |> (@onsite((; e = 0.0) -> e) + plusadjoint(peierls_hopping))
+h = slat |> (@onsite((; e = 0.0) -> e) + peierls_hopping)
 
-qplot(h(B = 0.2))
-
-
-flux_ratios = range(-1.0, 1.0, length = 301)
+flux_ratios = range(0.0, 1.0, length = 301)
 S_hex = (3 * sqrt(3) / 2) * (d_nn^2)
 params = (; e = 0.0, t = 2.0)
-b = bands(h, flux_ratios; mapping = p_ratio -> ftuple(; params..., B = 2π * p_ratio / S_hex))
-qplot(slat)
-fig = qplot(b, hide=:nodes)
-save("hex_butterfly.png", fig)
-qplot(h(B=0.2))
+
+b = bands(h, flux_ratios; mapping = p_ratio -> ftuple(; params..., B = 2π* p_ratio / S_hex))
+fig = qplot(b, hide=:bands, color=:black)
+save("Figures/hex_butterfly.png", fig)
+mesh = qplot(h)
+save("Figures/hex_mesh.png", mesh)
