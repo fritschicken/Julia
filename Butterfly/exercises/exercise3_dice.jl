@@ -6,13 +6,10 @@ using Quantica, GLMakie, StaticArrays, LinearAlgebra
 Build the positions inside one periodic unit cell for the dice-lattice
 construction.
 
-Returns three groups of sites:
-- `special`: the three corner/central sites used as hub-like vertices.
-- `edge`: interpolation points placed along the outer triangle edges.
-- `inside`: interpolation points placed along the inner triangle edges.
+Returns three groups of sites: `special` (the three corner/central sites), `edge`, inside`.
 
-`N` controls the number of subdivisions along each nearest-neighbor bond, and
-`d_nn` is the nearest-neighbor distance of the underlying honeycomb geometry.
+`N`: the number of subdivisions along each nearest-neighbor bond
+`d_nn`: the nearest-neighbor distance
 """
 function unit_coords(N, d_nn)
     # Reference vertical nearest-neighbor bond.
@@ -52,13 +49,6 @@ function unit_coords(N, d_nn)
     return special, edge, inside
 end
 
-"""
-    hexagon_region(r, center, d_nn; eps = 1e-5)
-
-Return `true` when position `r` lies inside the flat-sided hexagon centered at
-`center`. The half-space test uses the three independent edge-normal
-projections of a regular hexagon.
-"""
 function hexagon_region(r, center, d_nn; eps = 1e-5)
 
     dx = r[1] - center[1]
@@ -75,12 +65,6 @@ function hexagon_region(r, center, d_nn; eps = 1e-5)
     return (c1 <= r_in) && (c2 <= r_in) && (c3 <= r_in)
 end
 
-"""
-    multi_hexagon_region(r, centers, d_nn; eps = 1e-5)
-
-Union of several hexagonal regions. Used as the finite-sample boundary for the
-supercell, where each entry in `centers` marks one retained hexagon.
-"""
 function multi_hexagon_region(r, centers, d_nn; eps = 1e-5)
     return any(c -> hexagon_region(r, c, d_nn; eps = eps), centers)
 end
